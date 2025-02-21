@@ -18,3 +18,10 @@ See the [documentation](https://docs.rs/stac-duckdb) for more.
 ## Other info
 
 This crate is part of the [stac-rs](https://github.com/stac-utils/stac-rs) monorepo, see its README for contributing and license information.
+
+## Development
+
+Compiling this crate requires a copy of the DuckDB library. It may help to included the DuckDB crate bundle feature to compile DuckDB from source during the build process. To enable this feature run,
+```shell
+cargo build -F duckdb/bundled
+```
