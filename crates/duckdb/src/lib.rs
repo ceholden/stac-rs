@@ -95,7 +95,7 @@ pub struct Client {
 }
 
 /// Configuration for a client.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Whether to enable the s3 credential chain, which allows s3:// url access.
     ///
@@ -111,6 +111,13 @@ pub struct Config {
     ///
     /// Disable this to enable geopandas reading, for example.
     pub convert_wkb: bool,
+
+    /// Set custom DuckDB extension url
+    ///
+    /// Install DuckDB extensions from a custom location. You might use this
+    /// if running from a deployed environment and want to encapsulate all of your
+    /// dependencies in your container.
+    pub custom_extension_repository: Option<String>,
 }
 
 /// A SQL query.
@@ -153,6 +160,15 @@ impl Client {
     /// ```
     pub fn with_config(config: Config) -> Result<Client> {
         let connection = Connection::open_in_memory()?;
+        if let Some(custom_extension_repository) = config.custom_extension_repository.as_ref() {
+            connection.execute(
+                &format!(
+                    "SET custom_extension_repository = '{}';",
+                    custom_extension_repository
+                ),
+                [],
+            )?;
+        };
         connection.execute("INSTALL spatial", [])?;
         connection.execute("LOAD spatial", [])?;
         connection.execute("INSTALL icu", [])?;
@@ -281,7 +297,7 @@ impl Client {
         log::debug!("DuckDB SQL: {}", query.sql);
         statement
             .query_arrow(duckdb::params_from_iter(query.params))?
-            .map(|record_batch| to_geoarrow_record_batch(record_batch, self.config))
+            .map(|record_batch| to_geoarrow_record_batch(record_batch, self.config.convert_wkb))
             .collect::<Result<_>>()
     }
 
@@ -455,12 +471,13 @@ impl Default for Config {
             use_hive_partitioning: false,
             use_s3_credential_chain: true,
             convert_wkb: true,
+            custom_extension_repository: None,
         }
     }
 }
 
-fn to_geoarrow_record_batch(mut record_batch: RecordBatch, config: Config) -> Result<RecordBatch> {
-    if !config.convert_wkb {
+fn to_geoarrow_record_batch(mut record_batch: RecordBatch, convert_wkb: bool) -> Result<RecordBatch> {
+    if !convert_wkb {
         Ok(record_batch)
     } else if let Some((index, _)) = record_batch.schema().column_with_name("geometry") {
         let geometry_column = record_batch.remove_column(index);
